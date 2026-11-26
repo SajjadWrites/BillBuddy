@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BillBuddy — Smart Bill Reminders & Expense Tracker</title>
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .tab-active {
+      background-color: #0f172a;
+      color: #ffffff;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 1rem;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top Navigation Header -->
+  <header class="bg-slate-900 text-white sticky top-0 z-30 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500 flex items-center justify-center font-bold text-slate-950 text-lg shadow-sm">
+          ₹B
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight leading-none">BillBuddy</h1>
+          <p class="text-xs text-slate-400 mt-0.5">Bills, Reminders & Smart Expenses</p>
+        </div>
+      </div>
+
+      <!-- Page Switcher -->
+      <nav class="flex bg-slate-800 p-1 rounded-xl border border-slate-700">
+        <button id="nav-dashboard" onclick="switchPage('dashboard')" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition bg-emerald-500 text-slate-950">
+          Dashboard & Upcoming
+        </button>
+        <button id="nav-history" onclick="switchPage('history')" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition text-slate-300 hover:text-white">
+          History & Expenses
+        </button>
+      </nav>
+
+      <!-- Quick Controls -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <button onclick="toggleCurrency()" id="btn-currency" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold border border-slate-700" title="Switch Currency">
+          INR (₹)
+        </button>
+        <button onclick="openScanModal()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+          <span>📷</span> Scan Receipt
+        </button>
+        <button onclick="openDriveModal()" id="btn-drive-status" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium border border-slate-700 flex items-center gap-1.5">
+          <span id="drive-dot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+          <span id="drive-label">Drive Sync</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Area -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- PAGE 1: DASHBOARD & UPCOMING -->
+    <section id="page-dashboard" class="space-y-6">
+
+      <!-- Action & Reminder Toolbar -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">Financial Overview</h2>
+          <p class="text-xs text-slate-500">Upcoming obligations, monthly reminders, and 12-month projections</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="requestNotificationPermission()" class="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700">
+            🔔 Enable Alerts
+          </button>
+          <button onclick="exportICS()" class="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700">
+            📅 Export .ICS
+          </button>
+          <button onclick="openExpenseModal()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold">
+            + Log Expense
+          </button>
+          <button onclick="openBillModal()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm">
+            + Add Recurring Bill
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="card p-4">
+          <p class="text-xs font-medium text-slate-500">Monthly Recurring Avg</p>
+          <p id="kpi-monthly" class="text-2xl font-bold text-slate-900 mt-1">₹0</p>
+          <p id="kpi-annual-est" class="text-xs text-slate-400 mt-1">Annualized: ₹0</p>
+        </div>
+        <div class="card p-4">
+          <p class="text-xs font-medium text-slate-500">Due Within 30 Days</p>
+          <p id="kpi-due30" class="text-2xl font-bold text-amber-600 mt-1">₹0</p>
+          <p id="kpi-due30-count" class="text-xs text-slate-400 mt-1">0 bills upcoming</p>
+        </div>
+        <div class="card p-4">
+          <p class="text-xs font-medium text-slate-500">Overdue / Urgent</p>
+          <p id="kpi-overdue" class="text-2xl font-bold text-rose-600 mt-1">₹0</p>
+          <p id="kpi-overdue-count" class="text-xs text-slate-400 mt-1">0 bills require action</p>
+        </div>
+        <div class="card p-4">
+          <p class="text-xs font-medium text-slate-500">Spent This Month</p>
+          <p id="kpi-spent-month" class="text-2xl font-bold text-emerald-600 mt-1">₹0</p>
+          <p id="kpi-spent-count" class="text-xs text-slate-400 mt-1">Bills + daily expenses</p>
+        </div>
+      </div>
+
+      <!-- Smart Monthly Reminder Center -->
+      <div class="card p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">⏰</span>
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Smart Monthly Reminder Center</h3>
+              <p class="text-xs text-slate-500">Bills flagged ahead of due date based on your reminder window</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 text-xs">
+            <label for="lead-days" class="text-slate-500 font-medium">Remind ahead:</label>
+            <select id="lead-days" onchange="updateLeadDays(this.value)" class="border border-slate-200 rounded-lg px-2 py-1 bg-slate-50 font-semibold text-slate-700">
+              <option value="3">3 Days</option>
+              <option value="5">5 Days</option>
+              <option value="7" selected>7 Days</option>
+              <option value="15">15 Days</option>
+            </select>
+          </div>
+        </div>
+        <div id="reminder-list" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+      </div>
+
+      <!-- Analytics Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="card p-5 lg:col-span-2">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">12-Month Cashflow & Spike Projection</h3>
+              <p class="text-xs text-slate-500">Includes monthly, quarterly, half-yearly, and annual renewals</p>
+            </div>
+          </div>
+          <div class="h-64">
+            <canvas id="cashflowChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card p-5">
+          <div class="mb-3">
+            <h3 class="text-sm font-bold text-slate-900">Commitment Breakdown</h3>
+            <p class="text-xs text-slate-500">Annualized share by category</p>
+          </div>
+          <div class="h-64 flex items-center justify-center">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recurring Bills Schedule -->
+      <div class="card overflow-hidden">
+        <div class="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-base font-bold text-slate-900">Recurring Bills & Commitments</h3>
+            <p class="text-xs text-slate-500">Click "Mark Paid" to log payment and automatically advance the next due date</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="filter-bill-category" onchange="renderDashboard()" class="border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white">
+              <option value="ALL">All Categories</option>
+              <option value="Utilities">Utilities</option>
+              <option value="Insurance">Insurance</option>
+              <option value="Credit Card">Credit Card</option>
+              <option value="Loan / EMI">Loan / EMI</option>
+              <option value="Subscriptions">Subscriptions</option>
+              <option value="Other">Other</option>
+            </select>
+            <button onclick="clearSampleData()" class="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-medium">
+              Reset / Clear Data
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
+                <th class="py-3 px-4">Bill / Biller</th>
+                <th class="py-3 px-4">Category</th>
+                <th class="py-3 px-4">Cycle</th>
+                <th class="py-3 px-4">Amount</th>
+                <th class="py-3 px-4">Next Due</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="bills-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PAGE 2: HISTORY & EXPENSES -->
+    <section id="page-history" class="hidden space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">Payment History & Daily Expenses</h2>
+          <p class="text-xs text-slate-500">Complete ledger of paid bills, UPI transactions, and scanned receipts</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="exportCSV()" class="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700">
+            📊 Export CSV
+          </button>
+          <button onclick="exportJSON()" class="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700">
+            💾 Backup JSON
+          </button>
+          <label class="px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-medium text-slate-700 cursor-pointer">
+            📂 Restore JSON
+            <input type="file" accept=".json" onchange="importJSON(event)" class="hidden" />
+          </label>
+          <button onclick="openScanModal()" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold">
+            📷 Scan Screenshot
+          </button>
+          <button onclick="openExpenseModal()" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold">
+            + Add Expense
+          </button>
+        </div>
+      </div>
+
+      <!-- Ledger Filters & Summary Strip -->
+      <div class="card p-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2 flex-1 min-w-[240px]">
+          <input id="search-ledger" oninput="renderHistory()" type="text" placeholder="Search merchant, bill name, UPI ref..." class="border border-slate-200 rounded-xl px-3 py-2 text-xs w-full sm:w-64 focus:outline-none focus:border-emerald-500" />
+          <select id="filter-ledger-type" onchange="renderHistory()" class="border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white">
+            <option value="ALL">All Entries</option>
+            <option value="BILL_PAYMENT">Bill Payments</option>
+            <option value="EXPENSE">Daily Expenses</option>
+          </select>
+          <select id="filter-ledger-cat" onchange="renderHistory()" class="border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white">
+            <option value="ALL">All Categories</option>
+            <option value="Utilities">Utilities</option>
+            <option value="Insurance">Insurance</option>
+            <option value="Credit Card">Credit Card</option>
+            <option value="Loan / EMI">Loan / EMI</option>
+            <option value="Food & Dining">Food & Dining</option>
+            <option value="Shopping">Shopping</option>
+            <option value="Fuel & Travel">Fuel & Travel</option>
+            <option value="Subscriptions">Subscriptions</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="text-right">
+          <span class="text-xs text-slate-500">Filtered Total:</span>
+          <span id="ledger-filtered-total" class="text-base font-bold text-slate-900 ml-1">₹0</span>
+        </div>
+      </div>
+
+      <!-- History Table -->
+      <div class="card overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b border-slate-200">
+                <th class="py-3 px-4">Date</th>
+                <th class="py-3 px-4">Title / Merchant</th>
+                <th class="py-3 px-4">Type</th>
+                <th class="py-3 px-4">Category</th>
+                <th class="py-3 px-4">Reference / Note</th>
+                <th class="py-3 px-4 text-right">Amount</th>
+                <th class="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="history-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: ADD / EDIT RECURRING BILL -->
+  <div id="modal-bill" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 id="modal-bill-title" class="text-lg font-bold text-slate-900">Add Recurring Bill</h3>
+        <button onclick="closeModal('modal-bill')" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+      </div>
+      <form id="form-bill" onsubmit="saveBill(event)" class="space-y-3">
+        <input type="hidden" id="bill-id" />
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Bill / Biller Name</label>
+          <input id="bill-name" required type="text" placeholder="e.g., BESCOM Electricity, HDFC Home Loan" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+            <select id="bill-category" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
+              <option value="Utilities">Utilities</option>
+              <option value="Insurance">Insurance</option>
+              <option value="Credit Card">Credit Card</option>
+              <option value="Loan / EMI">Loan / EMI</option>
+              <option value="Subscriptions">Subscriptions</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Billing Cycle</label>
+            <select id="bill-cycle" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
+              <option value="monthly">Monthly</option>
+              <option value="quarterly">Quarterly (3 Mo)</option>
+              <option value="half-yearly">Half-Yearly (6 Mo)</option>
+              <option value="annual">Annual (12 Mo)</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Amount</label>
+            <input id="bill-amount" required type="number" step="0.01" min="0" placeholder="2500" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Next Due Date</label>
+            <input id="bill-due" required type="date" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Auto-Pay / Notes (Optional)</label>
+          <input id="bill-notes" type="text" placeholder="e.g., Auto-debit HDFC A/C, Consumer #12345" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-bill')" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold">Save Bill</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: MARK BILL PAID -->
+  <div id="modal-pay" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-slate-900">Record Bill Payment</h3>
+        <button onclick="closeModal('modal-pay')" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+      </div>
+      <form onsubmit="confirmBillPayment(event)" class="space-y-3">
+        <input type="hidden" id="pay-bill-id" />
+        <p id="pay-bill-summary" class="text-xs bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-700"></p>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Amount Paid</label>
+            <input id="pay-amount" required type="number" step="0.01" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Payment Date</label>
+            <input id="pay-date" required type="date" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">UPI Ref / Transaction ID</label>
+          <input id="pay-ref" type="text" placeholder="e.g., UPI Ref 432198765432" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-pay')" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold">Confirm & Advance Cycle</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD EXPENSE -->
+  <div id="modal-expense" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-slate-900">Log Expense</h3>
+        <button onclick="closeModal('modal-expense')" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+      </div>
+      <form onsubmit="saveExpense(event)" class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Merchant / Description</label>
+          <input id="exp-title" required type="text" placeholder="e.g., Swiggy, IndianOil Fuel, Grocery" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Amount</label>
+            <input id="exp-amount" required type="number" step="0.01" min="0" placeholder="450" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Date</label>
+            <input id="exp-date" required type="date" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+          <select id="exp-category" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white">
+            <option value="Food & Dining">Food & Dining</option>
+            <option value="Shopping">Shopping</option>
+            <option value="Fuel & Travel">Fuel & Travel</option>
+            <option value="Utilities">Utilities</option>
+            <option value="Subscriptions">Subscriptions</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Payment Mode / Ref Note</label>
+          <input id="exp-note" type="text" placeholder="e.g., GPay UPI, Amazon Pay ICICI" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" />
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-expense')" class="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600">Cancel</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold">Save Expense</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: AI RECEIPT / SCREENSHOT SCANNER -->
+  <div id="modal-scan" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-bold text-slate-900">AI Receipt & Screenshot Scanner</h3>
+          <p class="text-xs text-slate-500">Upload or paste (Ctrl+V) a GPay/PhonePe screenshot, receipt, or bill PDF</p>
+        </div>
+        <button onclick="closeModal('modal-scan')" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Gemini API Key (Saved locally in browser)</label>
+        <input id="gemini-api-key" type="password" onchange="saveGeminiKey(this.value)" placeholder="AIzaSy..." class="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs" />
+      </div>
+
+      <div id="drop-zone" onclick="document.getElementById('scan-file-input').click()" class="border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/40 rounded-2xl p-6 text-center cursor-pointer transition">
+        <p class="text-sm font-semibold text-indigo-900">Click to select file, drag & drop, or press Ctrl+V</p>
+        <p class="text-xs text-slate-500 mt-1">Supports PNG, JPG, WEBP, and PDF invoices</p>
+        <input id="scan-file-input" type="file" accept="image/*,application/pdf" onchange="handleScanFile(event)" class="hidden" />
+      </div>
+
+      <div id="scan-status" class="hidden text-xs font-medium text-indigo-700 bg-indigo-50 p-3 rounded-xl"></div>
+
+      <form id="scan-result-form" onsubmit="saveScannedExpense(event)" class="hidden space-y-3 border-t border-slate-100 pt-3">
+        <p class="text-xs font-bold text-emerald-700">✓ Extracted Details — Review & Save</p>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Merchant / Payee</label>
+            <input id="scan-title" required type="text" class="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Amount</label>
+            <input id="scan-amount" required type="number" step="0.01" class="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-sm" />
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Date</label>
+            <input id="scan-date" required type="date" class="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+            <select id="scan-category" class="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-sm bg-white">
+              <option value="Food & Dining">Food & Dining</option>
+              <option value="Shopping">Shopping</option>
+              <option value="Fuel & Travel">Fuel & Travel</option>
+              <option value="Utilities">Utilities</option>
+              <option value="Credit Card">Credit Card</option>
+              <option value="Insurance">Insurance</option>
+              <option value="Subscriptions">Subscriptions</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">UPI Ref / Reference Note</label>
+          <input id="scan-note" type="text" class="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-sm" />
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold">Add to History</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: GOOGLE DRIVE SYNC -->
+  <div id="modal-drive" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-slate-900">Google Drive Auto-Save</h3>
+        <button onclick="closeModal('modal-drive')" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+      </div>
+      <p class="text-xs text-slate-600 leading-relaxed">
+        Syncs your bills and expense ledger automatically to <strong>BillBuddy_Data.json</strong> in your Google Drive whenever you make changes.
+      </p>
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">Google OAuth 2.0 Web Client ID</label>
+        <input id="google-client-id" type="text" onchange="saveGoogleClientId(this.value)" placeholder="1234567890-abc.apps.googleusercontent.com" class="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs" />
+      </div>
+      <div id="drive-sync-info" class="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200">
+        Status: Not connected
+      </div>
+      <div class="flex flex-wrap justify-between gap-2 pt-2">
+        <button onclick="connectGoogleDrive()" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold">
+          Connect Google Drive
+        </button>
+        <div class="flex gap-2">
+          <button onclick="syncToDrive(true)" class="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold">
+            Sync Now
+          </button>
+          <button onclick="restoreFromDrive()" class="px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-semibold">
+            Restore
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'billbuddy_state_v1';
+    let cashflowChartInstance = null;
+    let categoryChartInstance = null;
+    let driveAccessToken = null;
+    let driveFileId = null;
+    let driveSyncTimer = null;
+
+    const todayISO = () => new Date().toISOString().split('T')[0];
+
+    function addDaysISO(days) {
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      return d.toISOString().split('T')[0];
+    }
+
+    const defaultState = {
+      currency: 'INR',
+      leadDays: 7,
+      geminiApiKey: '',
+      googleClientId: '',
+      bills: [
+        { id: 'b1', name: 'HDFC Home Loan EMI', category: 'Loan / EMI', cycle: 'monthly', amount: 34500, dueDate: addDaysISO(4), notes: 'Auto-debit on 5th' },
+        { id: 'b2', name: 'BESCOM Electricity', category: 'Utilities', cycle: 'monthly', amount: 2450, dueDate: addDaysISO(2), notes: 'Account ID 8842109' },
+        { id: 'b3', name: 'HDFC Regalia Credit Card', category: 'Credit Card', cycle: 'monthly', amount: 18200, dueDate: addDaysISO(11), notes: 'Statement due' },
+        { id: 'b4', name: 'JioFiber Broadband', category: 'Utilities', cycle: 'quarterly', amount: 2997, dueDate: addDaysISO(19), notes: '300 Mbps Quarterly Plan' },
+        { id: 'b5', name: 'Star Health Family Floater', category: 'Insurance', cycle: 'annual', amount: 22800, dueDate: addDaysISO(45), notes: 'Annual Renewal' },
+        { id: 'b6', name: 'Car Comprehensive Insurance', category: 'Insurance', cycle: 'annual', amount: 14600, dueDate: addDaysISO(82), notes: 'Zero Dep Policy' }
+      ],
+      history: [
+        { id: 'h1', date: addDaysISO(-3), title: 'BESCOM Electricity', type: 'BILL_PAYMENT', category: 'Utilities', amount: 2310, note: 'UPI Ref 432910482190' },
+        { id: 'h2', date: addDaysISO(-2), title: 'Swiggy Instamart', type: 'EXPENSE', category: 'Food & Dining', amount: 845, note: 'GPay UPI' },
+        { id: 'h3', date: addDaysISO(-1), title: 'IndianOil Fuel', type: 'EXPENSE', category: 'Fuel & Travel', amount: 2500, note: 'Credit Card' }
+      ]
+    };
+
+    let state = loadState();
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return structuredClone(defaultState);
+        return { ...structuredClone(defaultState), ...JSON.parse(raw) };
+      } catch {
+        return structuredClone(defaultState);
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      scheduleDriveSync();
+    }
+
+    function formatMoney(val) {
+      const num = Number(val) || 0;
+      if (state.currency === 'INR') {
+        return '₹' + num.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+      }
+      return '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function toggleCurrency() {
+      state.currency = state.currency === 'INR' ? 'USD' : 'INR';
+      document.getElementById('btn-currency').textContent = state.currency === 'INR' ? 'INR (₹)' : 'USD ($)';
+      saveState();
+      renderAll();
+    }
+
+    function switchPage(page) {
+      const isDash = page === 'dashboard';
+      document.getElementById('page-dashboard').classList.toggle('hidden', !isDash);
+      document.getElementById('page-history').classList.toggle('hidden', isDash);
+
+      const navDash = document.getElementById('nav-dashboard');
+      const navHist = document.getElementById('nav-history');
+      if (isDash) {
+        navDash.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition bg-emerald-500 text-slate-950';
+        navHist.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition text-slate-300 hover:text-white';
+        renderDashboard();
+      } else {
+        navHist.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition bg-emerald-500 text-slate-950';
+        navDash.className = 'px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition text-slate-300 hover:text-white';
+        renderHistory();
+      }
+    }
+
+    function daysUntil(dateStr) {
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      const target = new Date(dateStr + 'T00:00:00');
+      return Math.round((target - now) / (1000 * 60 * 60 * 24));
+    }
+
+    function advanceCycleDate(dateStr, cycle) {
+      const d = new Date(dateStr + 'T00:00:00');
+      if (cycle === 'monthly') d.setMonth(d.getMonth() + 1);
+      else if (cycle === 'quarterly') d.setMonth(d.getMonth() + 3);
+      else if (cycle === 'half-yearly') d.setMonth(d.getMonth() + 6);
+      else if (cycle === 'annual') d.setFullYear(d.getFullYear() + 1);
+      return d.toISOString().split('T')[0];
+    }
+
+    function cycleMultiplier(cycle) {
+      if (cycle === 'monthly') return 12;
+      if (cycle === 'quarterly') return 4;
+      if (cycle === 'half-yearly') return 2;
+      return 1;
+    }
+
+    function updateLeadDays(val) {
+      state.leadDays = Number(val);
+      saveState();
+      renderDashboard();
+    }
+
+    function renderAll() {
+      document.getElementById('btn-currency').textContent = state.currency === 'INR' ? 'INR (₹)' : 'USD ($)';
+      document.getElementById('lead-days').value = state.leadDays;
+      document.getElementById('gemini-api-key').value = state.geminiApiKey || '';
+      document.getElementById('google-client-id').value = state.googleClientId || '';
+      renderDashboard();
+      renderHistory();
+    }
+
+    function renderDashboard() {
+      // KPIs
+      let annualTotal = 0;
+      let due30Total = 0, due30Count = 0;
+      let overdueTotal = 0, overdueCount = 0;
+
+      state.bills.forEach(b => {
+        annualTotal += Number(b.amount) * cycleMultiplier(b.cycle);
+        const diff = daysUntil(b.dueDate);
+        if (diff < 0) {
+          overdueTotal += Number(b.amount);
+          overdueCount++;
+        } else if (diff <= 30) {
+          due30Total += Number(b.amount);
+          due30Count++;
+        }
+      });
+
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const monthEntries = state.history.filter(h => h.date.startsWith(ym));
+      const spentMonth = monthEntries.reduce((s, h) => s + Number(h.amount), 0);
+
+      document.getElementById('kpi-monthly').textContent = formatMoney(annualTotal / 12);
+      document.getElementById('kpi-annual-est').textContent = `Annualized: ${formatMoney(annualTotal)}`;
+      document.getElementById('kpi-due30').textContent = formatMoney(due30Total);
+      document.getElementById('kpi-due30-count').textContent = `${due30Count} bills upcoming`;
+      document.getElementById('kpi-overdue').textContent = formatMoney(overdueTotal);
+      document.getElementById('kpi-overdue-count').textContent = `${overdueCount} bills require action`;
+      document.getElementById('kpi-spent-month').textContent = formatMoney(spentMonth);
+      document.getElementById('kpi-spent-count').textContent = `${monthEntries.length} transactions this month`;
+
+      // Reminder Center
+      const reminderList = document.getElementById('reminder-list');
+      const flagged = state.bills
+        .map(b => ({ ...b, diff: daysUntil(b.dueDate) }))
+        .filter(b => b.diff <= state.leadDays)
+        .sort((a, b) => a.diff - b.diff);
+
+      if (flagged.length === 0) {
+        reminderList.innerHTML = `<div class="col-span-3 text-xs text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-100">All clear! No bills due within the next ${state.leadDays} days.</div>`;
+      } else {
+        reminderList.innerHTML = flagged.map(b => {
+          const isOverdue = b.diff < 0;
+          const badge = isOverdue
+            ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-700">Overdue by ${Math.abs(b.diff)}d</span>`
+            : b.diff === 0
+            ? `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">Due Today</span>`
+            : `<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">Due in ${b.diff}d</span>`;
+          return `
+            <div class="p-3.5 rounded-xl border ${isOverdue ? 'border-rose-200 bg-rose-50/40' : 'border-amber-200 bg-amber-50/40'} flex flex-col justify-between gap-2">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <p class="text-sm font-bold text-slate-900">${b.name}</p>
+                  <p class="text-xs text-slate-500">${b.category} • ${b.dueDate}</p>
+                </div>
+                ${badge}
+              </div>
+              <div class="flex items-center justify-between pt-1">
+                <span class="text-sm font-bold text-slate-900">${formatMoney(b.amount)}</span>
+                <button onclick="openPayModal('${b.id}')" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold">Mark Paid</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Recurring Bills Table
+      const catFilter = document.getElementById('filter-bill-category').value;
+      const filteredBills = state.bills
+        .filter(b => catFilter === 'ALL' || b.category === catFilter)
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+      const tbody = document.getElementById('bills-tbody');
+      if (filteredBills.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-xs text-slate-400">No recurring bills found. Click "+ Add Recurring Bill" to get started.</td></tr>`;
+      } else {
+        tbody.innerHTML = filteredBills.map(b => {
+          const diff = daysUntil(b.dueDate);
+          let statusHTML = `<span class="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">In ${diff} days</span>`;
+          if (diff < 0) statusHTML = `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">Overdue (${Math.abs(diff)}d)</span>`;
+          else if (diff <= state.leadDays) statusHTML = `<span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">Due Soon (${diff}d)</span>`;
+
+          return `
+            <tr class="hover:bg-slate-50/70">
+              <td class="py-3 px-4">
+                <p class="font-semibold text-slate-900">${b.name}</p>
+                ${b.notes ? `<p class="text-xs text-slate-400">${b.notes}</p>` : ''}
+              </td>
+              <td class="py-3 px-4 text-xs text-slate-600">${b.category}</td>
+              <td class="py-3 px-4 text-xs capitalize text-slate-600">${b.cycle}</td>
+              <td class="py-3 px-4 font-semibold text-slate-900">${formatMoney(b.amount)}</td>
+              <td class="py-3 px-4 text-xs text-slate-700">${b.dueDate}</td>
+              <td class="py-3 px-4">${statusHTML}</td>
+              <td class="py-3 px-4 text-right space-x-1 whitespace-nowrap">
+                <button onclick="openPayModal('${b.id}')" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold">Mark Paid</button>
+                <button onclick="editBill('${b.id}')" class="px-2 py-1 rounded-lg border border-slate-200 hover:bg-slate-100 text-xs text-slate-600">Edit</button>
+                <button onclick="deleteBill('${b.id}')" class="px-2 py-1 rounded-lg border border-rose-200 hover:bg-rose-50 text-xs text-rose-600">Del</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      renderCharts();
+    }
+
+    function renderCharts() {
+      // 12-month cashflow projection
+      const labels = [];
+      const totals = [];
+      const baseDate = new Date();
+      baseDate.setDate(1);
+
+      for (let i = 0; i < 12; i++) {
+        const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, 1);
+        const y = d.getFullYear();
+        const m = d.getMonth();
+        labels.push(d.toLocaleString('en-US', { month: 'short', year: '2-digit' }));
+
+        let monthSum = 0;
+        state.bills.forEach(b => {
+          const due = new Date(b.dueDate + 'T00:00:00');
+          const monthsDiff = (y - due.getFullYear()) * 12 + (m - due.getMonth());
+          if (monthsDiff >= 0) {
+            if (b.cycle === 'monthly') monthSum += Number(b.amount);
+            else if (b.cycle === 'quarterly' && monthsDiff % 3 === 0) monthSum += Number(b.amount);
+            else if (b.cycle === 'half-yearly' && monthsDiff % 6 === 0) monthSum += Number(b.amount);
+            else if (b.cycle === 'annual' && monthsDiff % 12 === 0) monthSum += Number(b.amount);
+          }
+        });
+        totals.push(monthSum);
+      }
+
+      const avg = totals.reduce((a, b) => a + b, 0) / 12;
+      const barColors = totals.map(v => (v > avg * 1.2 ? '#f59e0b' : '#10b981'));
+
+      const ctx1 = document.getElementById('cashflowChart').getContext('2d');
+      if (cashflowChartInstance) cashflowChartInstance.destroy();
+      cashflowChartInstance = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Projected Bills',
+            data: totals,
+            backgroundColor: barColors,
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
+            x: { grid: { display: false } }
+          }
+        }
+      });
+
+      // Category Doughnut
+      const catTotals = {};
+      state.bills.forEach(b => {
+        const ann = Number(b.amount) * cycleMultiplier(b.cycle);
+        catTotals[b.category] = (catTotals[b.category] || 0) + ann;
+      });
+
+      const ctx2 = document.getElementById('categoryChart').getContext('2d');
+      if (categoryChartInstance) categoryChartInstance.destroy();
+      categoryChartInstance = new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+          labels: Object.keys(catTotals),
+          datasets: [{
+            data: Object.values(catTotals),
+            backgroundColor: ['#10b981', '#6366f1', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } }
+          }
+        }
+      });
+    }
+
+    function renderHistory() {
+      const q = document.getElementById('search-ledger').value.toLowerCase();
+      const typeFilter = document.getElementById('filter-ledger-type').value;
+      const catFilter = document.getElementById('filter-ledger-cat').value;
+
+      const items = state.history
+        .filter(h => {
+          if (typeFilter !== 'ALL' && h.type !== typeFilter) return false;
+          if (catFilter !== 'ALL' && h.category !== catFilter) return false;
+          if (q && !`${h.title} ${h.note || ''} ${h.category}`.toLowerCase().includes(q)) return false;
+          return true;
+        })
+        .sort((a, b) => b.date.localeCompare(a.date));
+
+      const total = items.reduce((s, h) => s + Number(h.amount), 0);
+      document.getElementById('ledger-filtered-total').textContent = formatMoney(total);
+
+      const tbody = document.getElementById('history-tbody');
+      if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-xs text-slate-400">No matching transactions found.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = items.map(h => `
+        <tr class="hover:bg-slate-50/70">
+          <td class="py-3 px-4 text-xs text-slate-600 whitespace-nowrap">${h.date}</td>
+          <td class="py-3 px-4 font-semibold text-slate-900">${h.title}</td>
+          <td class="py-3 px-4 text-xs">
+            <span class="px-2 py-0.5 rounded-full font-medium ${h.type === 'BILL_PAYMENT' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-700'}">
+              ${h.type === 'BILL_PAYMENT' ? 'Bill Paid' : 'Expense'}
+            </span>
+          </td>
+          <td class="py-3 px-4 text-xs text-slate-600">${h.category}</td>
+          <td class="py-3 px-4 text-xs text-slate-500">${h.note || '—'}</td>
+          <td class="py-3 px-4 text-right font-bold text-slate-900">${formatMoney(h.amount)}</td>
+          <td class="py-3 px-4 text-right">
+            <button onclick="deleteHistory('${h.id}')" class="px-2 py-1 rounded-lg border border-rose-200 hover:bg-rose-50 text-xs text-rose-600">Del</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Modal Helpers
+    function openModal(id) {
+      const el = document.getElementById(id);
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+    }
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      el.classList.add('hidden');
+      el.classList.remove('flex');
+    }
+
+    // Bill CRUD
+    function openBillModal() {
+      document.getElementById('modal-bill-title').textContent = 'Add Recurring Bill';
+      document.getElementById('bill-id').value = '';
+      document.getElementById('form-bill').reset();
+      document.getElementById('bill-due').value = todayISO();
+      openModal('modal-bill');
+    }
+
+    function editBill(id) {
+      const b = state.bills.find(x => x.id === id);
+      if (!b) return;
+      document.getElementById('modal-bill-title').textContent = 'Edit Recurring Bill';
+      document.getElementById('bill-id').value = b.id;
+      document.getElementById('bill-name').value = b.name;
+      document.getElementById('bill-category').value = b.category;
+      document.getElementById('bill-cycle').value = b.cycle;
+      document.getElementById('bill-amount').value = b.amount;
+      document.getElementById('bill-due').value = b.dueDate;
+      document.getElementById('bill-notes').value = b.notes || '';
+      openModal('modal-bill');
+    }
+
+    function saveBill(e) {
+      e.preventDefault();
+      const id = document.getElementById('bill-id').value;
+      const payload = {
+        id: id || 'b_' + Date.now(),
+        name: document.getElementById('bill-name').value.trim(),
+        category: document.getElementById('bill-category').value,
+        cycle: document.getElementById('bill-cycle').value,
+        amount: Number(document.getElementById('bill-amount').value),
+        dueDate: document.getElementById('bill-due').value,
+        notes: document.getElementById('bill-notes').value.trim()
+      };
+      if (id) {
+        state.bills = state.bills.map(b => (b.id === id ? payload : b));
+      } else {
+        state.bills.push(payload);
+      }
+      saveState();
+      closeModal('modal-bill');
+      renderDashboard();
+    }
+
+    function deleteBill(id) {
+      if (!confirm('Remove this recurring bill?')) return;
+      state.bills = state.bills.filter(b => b.id !== id);
+      saveState();
+      renderDashboard();
+    }
+
+    // Pay Bill & Advance Cycle
+    function openPayModal(id) {
+      const b = state.bills.find(x => x.id === id);
+      if (!b) return;
+      document.getElementById('pay-bill-id').value = b.id;
+      document.getElementById('pay-bill-summary').textContent = `${b.name} (${b.cycle}) • Current Due: ${b.dueDate}`;
+      document.getElementById('pay-amount').value = b.amount;
+      document.getElementById('pay-date').value = todayISO();
+      document.getElementById('pay-ref').value = '';
+      openModal('modal-pay');
+    }
+
+    function confirmBillPayment(e) {
+      e.preventDefault();
+      const id = document.getElementById('pay-bill-id').value;
+      const b = state.bills.find(x => x.id === id);
+      if (!b) return;
+
+      const amt = Number(document.getElementById('pay-amount').value);
+      const dt = document.getElementById('pay-date').value;
+      const ref = document.getElementById('pay-ref').value.trim();
+
+      state.history.unshift({
+        id: 'h_' + Date.now(),
+        date: dt,
+        title: b.name,
+        type: 'BILL_PAYMENT',
+        category: b.category,
+        amount: amt,
+        note: ref || `${b.cycle} cycle payment`
+      });
+
+      b.dueDate = advanceCycleDate(b.dueDate, b.cycle);
+      saveState();
+      closeModal('modal-pay');
+      renderAll();
+    }
+
+    // Daily Expense CRUD
+    function openExpenseModal() {
+      document.getElementById('exp-title').value = '';
+      document.getElementById('exp-amount').value = '';
+      document.getElementById('exp-date').value = todayISO();
+      document.getElementById('exp-note').value = '';
+      openModal('modal-expense');
+    }
+
+    function saveExpense(e) {
+      e.preventDefault();
+      state.history.unshift({
+        id: 'h_' + Date.now(),
+        date: document.getElementById('exp-date').value,
+        title: document.getElementById('exp-title').value.trim(),
+        type: 'EXPENSE',
+        category: document.getElementById('exp-category').value,
+        amount: Number(document.getElementById('exp-amount').value),
+        note: document.getElementById('exp-note').value.trim()
+      });
+      saveState();
+      closeModal('modal-expense');
+      renderAll();
+    }
+
+    function deleteHistory(id) {
+      if (!confirm('Delete this history record?')) return;
+      state.history = state.history.filter(h => h.id !== id);
+      saveState();
+      renderAll();
+    }
+
+    function clearSampleData() {
+      if (!confirm('Clear all bills and history?')) return;
+      state.bills = [];
+      state.history = [];
+      saveState();
+      renderAll();
+    }
+
+    // Notifications & Exports
+    function requestNotificationPermission() {
+      if (!('Notification' in window)) {
+        alert('Browser notifications are not supported on this device.');
+        return;
+      }
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') {
+          const dueCount = state.bills.filter(b => daysUntil(b.dueDate) <= state.leadDays).length;
+          new Notification('BillBuddy Reminders Active', {
+            body: `You have ${dueCount} bill(s) due within ${state.leadDays} days.`
+          });
+        }
+      });
+    }
+
+    function exportICS() {
+      let lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//BillBuddy//EN'];
+      state.bills.forEach(b => {
+        const dt = b.dueDate.replace(/-/g, '');
+        const rrule = b.cycle === 'monthly' ? 'FREQ=MONTHLY'
+          : b.cycle === 'quarterly' ? 'FREQ=MONTHLY;INTERVAL=3'
+          : b.cycle === 'half-yearly' ? 'FREQ=MONTHLY;INTERVAL=6'
+          : 'FREQ=YEARLY';
+        lines.push(
+          'BEGIN:VEVENT',
+          `UID:${b.id}@billbuddy`,
+          `DTSTART;VALUE=DATE:${dt}`,
+          `RRULE:${rrule}`,
+          `SUMMARY:Bill Due - ${b.name} (${formatMoney(b.amount)})`,
+          `DESCRIPTION:Category: ${b.category}. ${b.notes || ''}`,
+          'END:VEVENT'
+        );
+      });
+      lines.push('END:VCALENDAR');
+      downloadFile(lines.join('\r\n'), `billbuddy-reminders-${todayISO()}.ics`, 'text/calendar');
+    }
+
+    function exportCSV() {
+      const headers = ['Date', 'Title', 'Type', 'Category', 'Amount', 'Note'];
+      const rows = state.history.map(h => [
+        h.date,
+        `"${(h.title || '').replace(/"/g, '""')}"`,
+        h.type,
+        h.category,
+        h.amount,
+        `"${(h.note || '').replace(/"/g, '""')}"`
+      ].join(','));
+      downloadFile([headers.join(','), ...rows].join('\n'), `billbuddy-records-${todayISO()}.csv`, 'text/csv');
+    }
+
+    function exportJSON() {
+      downloadFile(JSON.stringify(state, null, 2), `billbuddy-backup-${todayISO()}.json`, 'application/json');
+    }
+
+    function importJSON(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          const parsed = JSON.parse(ev.target.result);
+          if (parsed.bills && parsed.history) {
+            state = { ...state, ...parsed };
+            saveState();
+            renderAll();
+            alert('Backup restored successfully!');
+          }
+        } catch {
+          alert('Invalid JSON backup file.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function downloadFile(content, filename, mime) {
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // AI Receipt & Screenshot Scanner (Gemini API)
+    function openScanModal() {
+      document.getElementById('scan-status').classList.add('hidden');
+      document.getElementById('scan-result-form').classList.add('hidden');
+      openModal('modal-scan');
+    }
+
+    function saveGeminiKey(val) {
+      state.geminiApiKey = val.trim();
+      saveState();
+    }
+
+    window.addEventListener('paste', e => {
+      const modal = document.getElementById('modal-scan');
+      if (modal.classList.contains('hidden')) return;
+      const items = e.clipboardData?.items || [];
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          processScanBlob(item.getAsFile());
+          break;
+        }
+      }
+    });
+
+    function handleScanFile(e) {
+      const file = e.target.files[0];
+      if (file) processScanBlob(file);
+    }
+
+    function processScanBlob(file) {
+      if (!state.geminiApiKey) {
+        alert('Please enter your Gemini API Key first.');
+        return;
+      }
+      const statusEl = document.getElementById('scan-status');
+      statusEl.textContent = 'Analyzing receipt / screenshot with Gemini...';
+      statusEl.classList.remove('hidden');
+
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64Data = reader.result.split(',')[1];
+          const mimeType = file.type || 'image/png';
+          const prompt = `Extract payment or bill details from this image/document. Return ONLY valid JSON with keys: "title" (merchant or biller name), "amount" (number only), "date" (YYYY-MM-DD, default ${todayISO()} if missing), "category" (one of: Food & Dining, Shopping, Fuel & Travel, Utilities, Credit Card, Insurance, Subscriptions, Other), "note" (UPI transaction ID, payment method, or short summary).`;
+
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(state.geminiApiKey)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: prompt },
+                  { inline_data: { mime_type: mimeType, data: base64Data } }
+                ]
+              }],
+              generationConfig: { responseMimeType: 'application/json' }
+            })
+          });
+
+          const data = await res.json();
+          const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+          const parsed = JSON.parse(rawText);
+
+          document.getElementById('scan-title').value = parsed.title || 'Scanned Payment';
+          document.getElementById('scan-amount').value = parsed.amount || '';
+          document.getElementById('scan-date').value = parsed.date || todayISO();
+          document.getElementById('scan-category').value = parsed.category || 'Other';
+          document.getElementById('scan-note').value = parsed.note || '';
+
+          statusEl.classList.add('hidden');
+          document.getElementById('scan-result-form').classList.remove('hidden');
+        } catch (err) {
+          statusEl.textContent = 'Could not parse document. Check your API key or try a clearer image.';
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function saveScannedExpense(e) {
+      e.preventDefault();
+      state.history.unshift({
+        id: 'h_' + Date.now(),
+        date: document.getElementById('scan-date').value,
+        title: document.getElementById('scan-title').value.trim(),
+        type: 'EXPENSE',
+        category: document.getElementById('scan-category').value,
+        amount: Number(document.getElementById('scan-amount').value),
+        note: document.getElementById('scan-note').value.trim()
+      });
+      saveState();
+      closeModal('modal-scan');
+      renderAll();
+    }
+
+    // Google Drive Auto-Sync
+    function openDriveModal() {
+      openModal('modal-drive');
+    }
+
+    function saveGoogleClientId(val) {
+      state.googleClientId = val.trim();
+      saveState();
+    }
+
+    function setDriveIndicator(text, colorClass) {
+      document.getElementById('drive-label').textContent = text;
+      document.getElementById('drive-dot').className = `w-2 h-2 rounded-full ${colorClass}`;
+      document.getElementById('drive-sync-info').textContent = `Status: ${text}`;
+    }
+
+    function connectGoogleDrive() {
+      if (!state.googleClientId) {
+        alert('Enter your Google OAuth 2.0 Web Client ID first.');
+        return;
+      }
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: state.googleClientId,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: async resp => {
+          if (resp.access_token) {
+            driveAccessToken = resp.access_token;
+            setDriveIndicator('Drive Connected', 'bg-emerald-400');
+            await findOrCreateDriveFile();
+            await syncToDrive(true);
+          }
+        }
+      });
+      client.requestAccessToken();
+    }
+
+    async function findOrCreateDriveFile() {
+      const q = encodeURIComponent("name='BillBuddy_Data.json' and trashed=false");
+      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
+        headers: { Authorization: `Bearer ${driveAccessToken}` }
+      });
+      const searchData = await searchRes.json();
+      if (searchData.files && searchData.files.length > 0) {
+        driveFileId = searchData.files[0].id;
+      } else {
+        const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${driveAccessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ name: 'BillBuddy_Data.json', mimeType: 'application/json' })
+        });
+        const created = await createRes.json();
+        driveFileId = created.id;
+      }
+    }
+
+    function scheduleDriveSync() {
+      if (!driveAccessToken) return;
+      clearTimeout(driveSyncTimer);
+      setDriveIndicator('Saving...', 'bg-amber-400');
+      driveSyncTimer = setTimeout(() => syncToDrive(false), 1500);
+    }
+
+    async function syncToDrive(manual) {
+      if (!driveAccessToken) {
+        if (manual) alert('Please connect Google Drive first.');
+        return;
+      }
+      try {
+        if (!driveFileId) await findOrCreateDriveFile();
+        await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${driveAccessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(state)
+        });
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setDriveIndicator(`Synced ${time}`, 'bg-emerald-400');
+      } catch {
+        setDriveIndicator('Sync Error', 'bg-rose-400');
+      }
+    }
+
+    async function restoreFromDrive() {
+      if (!driveAccessToken) {
+        alert('Please connect Google Drive first.');
+        return;
+      }
+      try {
+        if (!driveFileId) await findOrCreateDriveFile();
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
+          headers: { Authorization: `Bearer ${driveAccessToken}` }
+        });
+        const remote = await res.json();
+        if (remote && remote.bills && remote.history) {
+          state = { ...state, ...remote };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          renderAll();
+          alert('Restored latest data from Google Drive!');
+        }
+      } catch {
+        alert('Could not restore data from Google Drive.');
+      }
+    }
+
+    // Register Service Worker for PWA Installation
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js');
+      });
+    }
+
+    renderAll();
+  </script>
+</body>
+</html>
